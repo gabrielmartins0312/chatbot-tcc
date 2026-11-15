@@ -1,61 +1,101 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Chatbot de atendimento no WhatsApp com IA
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Trabalho de Conclusão de Curso em Engenharia de Software (UniAmérica Descomplica, 2025).
 
-## About Laravel
+Sistema de atendimento ao cliente pelo WhatsApp que responde com IA (OpenAI) usando a base de conhecimento do estabelecimento, passa a conversa para um atendente humano quando o cliente pede e mede cada atendimento. O objetivo do TCC foi comparar, com dados reais, o atendimento feito pelo bot e o feito por pessoas: tempo de resposta, duração e satisfação do cliente.
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+## O que o sistema faz
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+- **Responde no WhatsApp com IA.** Cada mensagem recebida chega por webhook, e a resposta é gerada pela API da OpenAI com base nas informações do estabelecimento e nas últimas mensagens da conversa.
+- **Base de conhecimento editável.** O estabelecimento cadastra no painel os trechos de informação (horários, produtos, regras) que a IA usa para responder.
+- **Dois modos de atendimento.** No modo IA, o bot conduz a conversa. No modo humano, a mensagem é registrada para um atendente responder, e o encerramento é feito pelo painel.
+- **Passagem para humano.** Se o cliente pede para falar com uma pessoa, a conversa é marcada como escalada e o cliente é avisado de que um atendente vai entrar em contato.
+- **Aviso de LGPD.** A primeira resposta informa que o atendimento faz parte de um projeto acadêmico e que as interações podem ser analisadas de forma anônima.
+- **Pesquisa de satisfação.** Ao fim da conversa, o cliente dá uma nota de 1 a 5, e o sistema agradece de acordo com a nota.
+- **Métricas por conversa.** Ao encerrar, o sistema calcula tempo médio de resposta, tempo até a primeira resposta, duração total, número de mensagens de cada lado, se houve escalonamento e a nota de satisfação.
+- **Painel administrativo.** Em Filament, com conversas, mensagens, base de conhecimento e um painel de métricas que compara bot e humano em tempo de resposta, duração, satisfação e conversas escaladas.
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+## Como funciona
 
-## Learning Laravel
+```
+Cliente no WhatsApp
+      │
+      ▼
+Evolution API ──webhook──▶ POST /api/webhook (Laravel)
+                                 │
+                 ┌───────────────┴───────────────┐
+                 ▼                               ▼
+            Modo IA                         Modo humano
+  base de conhecimento + histórico     registra a mensagem
+  ──▶ OpenAI ──▶ resposta              para o atendente
+                 │                               │
+                 └───────────────┬───────────────┘
+                                 ▼
+             Pesquisa de satisfação ──▶ métricas da conversa
+                                 │
+                                 ▼
+                     Painel Filament (gráficos)
+```
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+1. A Evolution API recebe a mensagem do WhatsApp e a envia para `POST /api/webhook`.
+2. O sistema identifica a conversa aberta do cliente, ou cria uma nova, e guarda a mensagem.
+3. No modo IA, monta o contexto com a base de conhecimento do estabelecimento e as seis mensagens mais recentes, chama a OpenAI e devolve a resposta pelo WhatsApp. Respostas idênticas em sequência são descartadas.
+4. Quando o cliente se despede, pede um humano ou a própria IA encerra o assunto, o sistema pede a nota de 1 a 5.
+5. Com a nota, a conversa é encerrada e as métricas são gravadas para o painel.
 
-You may also try the [Laravel Bootcamp](https://bootcamp.laravel.com), where you will be guided through building a modern Laravel application from scratch.
+## Tecnologias
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+- PHP 8.2 e Laravel 12
+- Filament 3 (painel administrativo e gráficos)
+- API da OpenAI (chat completions)
+- Evolution API (envio e recebimento de mensagens no WhatsApp)
+- Banco relacional via Eloquent (SQLite por padrão, MySQL compatível)
 
-## Laravel Sponsors
+## Estrutura principal
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+| Caminho | O que tem |
+|---|---|
+| `app/Http/Controllers/WebhookController.php` | Recebe as mensagens, decide o modo, chama a IA, faz a pesquisa de satisfação e calcula as métricas |
+| `app/Http/Controllers/AdminConversationController.php` | Encerramento manual de conversas no modo humano |
+| `app/Models` | Estabelecimento, conversa, mensagem, trecho de conhecimento e métricas |
+| `app/Filament/Resources` | Telas de conversas, mensagens e base de conhecimento |
+| `app/Filament/Widgets` | Gráficos que comparam bot e humano |
+| `routes/api.php` | Rota do webhook |
 
-### Premium Partners
+## Como rodar
 
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
+Pré-requisitos: PHP 8.2+, Composer, Node.js, uma chave da OpenAI e uma instância da Evolution API conectada a um número de WhatsApp.
 
-## Contributing
+```bash
+git clone https://github.com/gabrielmartins0312/chatbot-tcc.git
+cd chatbot-tcc
+composer install
+npm install && npm run build
+cp .env.example .env
+php artisan key:generate
+php artisan migrate
+php artisan make:filament-user
+php artisan serve
+```
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+Acrescente ao `.env`:
 
-## Code of Conduct
+```
+OPENAI_API_KEY=sua-chave
+EVOLUTION_API_URL=https://sua-instancia-evolution
+EVOLUTION_SESSION=nome-da-sessao
+EVOLUTION_API_KEY=chave-da-evolution
+```
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+Depois, configure na Evolution API o webhook do evento `messages.upsert` apontando para `https://seu-endereco/api/webhook`, cadastre um estabelecimento e a base de conhecimento no painel (`/admin`) e mande uma mensagem para o número conectado.
 
-## Security Vulnerabilities
+## Próximos passos
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+- Buscar só os trechos da base de conhecimento relevantes para cada pergunta, em vez de enviar a base inteira, para reduzir custo e permitir bases maiores.
+- Detectar despedidas e pedidos de humano com a própria IA, em vez de expressões fixas.
+- Processar as mensagens em fila, para o webhook responder na hora mesmo com a IA lenta.
+- Testes automatizados do fluxo do webhook.
 
-## License
+## Autor
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+Gabriel Martins Nascimento · [LinkedIn](https://www.linkedin.com/in/gabrielmartins0312/) · [GitHub](https://github.com/gabrielmartins0312)
